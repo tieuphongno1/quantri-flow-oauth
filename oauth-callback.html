@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>QuanTri Flow — Kết nối YouTube</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+    .card{background:#1e293b;border-radius:12px;padding:32px 28px;max-width:460px;width:100%;text-align:center;box-shadow:0 4px 32px rgba(0,0,0,.4)}
+    h1{font-size:2.2rem;margin-bottom:8px}
+    h2{font-size:1.1rem;font-weight:600;margin-bottom:12px}
+    p{color:#94a3b8;font-size:.9rem;line-height:1.6}
+    .ok{color:#22c55e}.err{color:#ef4444}.wait{color:#38bdf8}
+    .btn{display:inline-block;margin-top:20px;padding:8px 20px;background:#22c55e;color:#fff;border-radius:8px;font-size:.9rem;cursor:pointer;border:none}
+    .btn:hover{opacity:.85}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="icon">⏳</h1>
+    <h2 id="title" class="wait">Đang hoàn tất kết nối…</h2>
+    <p id="body">Đừng đóng trang này. Hệ thống đang gửi quyền về máy quản trị.</p>
+    <button class="btn" type="button" onclick="window.close()">Đóng tab</button>
+  </div>
+  <script>
+    function decodePayload(state) {
+      try {
+        const part = state.split('.')[1];
+        const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+        return JSON.parse(atob(pad));
+      } catch { return null; }
+    }
+    function show(ok, title, body) {
+      document.getElementById('icon').textContent = ok ? '✅' : '❌';
+      document.getElementById('title').textContent = title;
+      document.getElementById('title').className = ok ? 'ok' : 'err';
+      document.getElementById('body').innerHTML = body;
+      if (ok) setTimeout(function () { window.close(); }, 8000);
+    }
+    (async function () {
+      const q = new URLSearchParams(location.search);
+      if (q.get('error')) {
+        show(false, 'Không được cấp quyền', 'Google: <code>' + q.get('error') + '</code>');
+        return;
+      }
+      const code = q.get('code');
+      const state = q.get('state');
+      if (!code || !state) {
+        show(false, 'Thiếu mã kết nối', 'URL không có code/state. Tạo lại link trong app.');
+        return;
+      }
+      const payload = decodePayload(state);
+      const ingest = payload && payload.ingest;
+      if (!ingest) {
+        show(false, 'Link hết hạn', 'Tạo lại link kết nối trong QuanTri Flow rồi mở lại.');
+        return;
+      }
+      try {
+        const res = await fetch(ingest, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, state: state }),
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          show(false, 'Lỗi kết nối', data.message || ('HTTP ' + res.status));
+          return;
+        }
+        show(
+          true,
+          'Kết nối thành công!',
+          'Kênh <strong>' + (data.title || '') + '</strong> đã được xác thực. Hệ thống đang tự đồng bộ. Tab này sẽ đóng sau 8 giây.',
+        );
+      } catch (e) {
+        show(
+          false,
+          'Không gửi được về hệ thống',
+          'Máy quản trị chưa mở tunnel / API. Nhờ người gửi link tạo lại link rồi thử lại. Chi tiết: ' + (e && e.message ? e.message : e),
+        );
+      }
+    })();
+  </script>
+</body>
+</html>
